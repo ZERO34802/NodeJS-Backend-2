@@ -141,7 +141,7 @@ packages/api/web/ → simple frontend consuming SSE.
 # Demo Links
 Video: (https://drive.google.com/file/d/1PWTCa8LEphC0Yv1tWeZxMF9LbE8JWPUb/view?usp=sharing)
 
-PDF: add your architecture/flow document link here.
+PDF: (https://drive.google.com/file/d/1DqiWhSccPCCnjJoVD51MLTTaalUIk5Dc/view?usp=sharing).
 
 # Development
 ```bash
