@@ -27,22 +27,28 @@ Create a .env file at the repository root with the variables below.
 Environment (.env at repo root)
 
 # External API
+```bash
 COINGECKO_API_KEY=your_key_here
+```
 
 # Data & cache
+```bash
 REDIS_URL=redis://redis:6379
 PG_URL=postgres://app:secret@db:5432/crypto
+```
 
 # Worker behavior
+```bash
 COIN_IDS=bitcoin,ethereum,solana
 VS=usd
 POLL_INTERVAL_MS=15000
+```
 
 # Quick Start
 Start the stack
-
+```bash
 docker compose -f infra/docker-compose.yml up -d --build
-
+```
 Open the app
 
 http://localhost:3001
@@ -94,10 +100,11 @@ PATCH /alerts/:id/toggle
 DELETE /alerts/:id
 
 # Docker Cheatsheet (for the demo)
+```bash
 Show running services
 
 docker compose -f infra/docker-compose.yml ps
-
+```
 Worker logs (watch polling and alert emits)
 
 docker logs -f infra-worker-1
@@ -107,9 +114,9 @@ Inspect cached price (example)
 docker exec -it infra-redis-1 redis-cli HGETALL price:ethereum:usd
 
 Inspect alerts in DB
-
+```bash
 docker exec -it infra-db-1 psql -U app -d crypto -c "SELECT id, coin, op, price, active FROM alerts ORDER BY id DESC LIMIT 10;"
-
+```
 Handling Rate Limits
 If CoinGecko returns 429, the worker backs off using the Retry‑After header (when provided) or waits for 2× the poll interval before retrying.
 
@@ -137,7 +144,7 @@ Video: add your recording link here.
 PDF: add your architecture/flow document link here.
 
 # Development
-
+```bash
 docker compose -f infra/docker-compose.yml build --no-cache worker
 
 docker compose -f infra/docker-compose.yml up -d worker
@@ -145,7 +152,7 @@ docker compose -f infra/docker-compose.yml up -d worker
 Flush Redis during testing (clears cooldowns and cache)
 
 docker exec -it infra-redis-1 redis-cli FLUSHALL
-
+```
 # Tech Stack
 Node.js, TypeScript, Express
 
