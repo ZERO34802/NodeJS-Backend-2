@@ -1,22 +1,19 @@
-// Load env from repo root deterministically (works under ts-node/ESM)
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// repoRoot = packages/worker/../../..
-const repoRoot = path.resolve(__dirname, '../../..');
-dotenv.config({ path: path.join(repoRoot, '.env') });
-console.log('env loaded from:', path.join(repoRoot, '.env'), 'key?', Boolean(process.env.COINGECKO_API_KEY));
-
-
 import Axios from 'axios';
 import RedisPkg from 'ioredis';
 import pgPkg from 'pg';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+// Load env from repo root deterministically
+const repoRoot = path.resolve(__dirname, '../../..');
+dotenv.config({ path: path.join(repoRoot, '.env') });
+console.log('env loaded from:', path.join(repoRoot, '.env'), 'key?', Boolean(process.env.COINGECKO_API_KEY));
+
+// Load again from root as fallback
 const rootEnv = path.resolve(__dirname, '../../..', '.env');
 dotenv.config({ path: rootEnv });
 console.log('loaded .env from:', rootEnv, 'has key?', Boolean(process.env.COINGECKO_API_KEY));
@@ -33,6 +30,7 @@ const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '15000', 10);
 // Clients
 const redis = new Redis(REDIS_URL);
 const pg = new Pool({ connectionString: process.env.PG_URL || 'postgres://app:secret@localhost:5432/crypto' });
+console.log('WORKER_PG', process.env.PG_URL || 'postgres://app:secret@localhost:5432/crypto');
 
 // HTTP
 const http = Axios.create({
@@ -43,44 +41,30 @@ const http = Axios.create({
   }
 });
 
-
 // Types
 type Prices = Record<string, Record<string, number>>;
-type Alert = {
+type DBAlert = {
   id: number;
-  user_id: string | null;
-  coin_id: string;
-  vs_currency: string;
-  type: 'above' | 'below' | 'percent_change';
-  value: number;
-  window_minutes: number;
-  cooldown_sec: number;
+  coin: string | null;
+  op: '>' | '<' | null;
+  price: number | null;
   active: boolean;
-  last_triggered_at: string | null;
+  coin_id?: string | null;
+  type?: string | null;
+  value?: number | null;
+  vs_currency?: string | null;
+  cooldown_sec?: number | null;
 };
 
-// Fetch prices from CoinGecko with rate-limit backoff
+// Fetch prices
 async function fetchPrices(ids: string[], vs: string): Promise<Prices> {
   const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=${vs}`;
-  try {
-    console.log('fetching from CoinGecko:', `ids=${ids.join(',')}&vs=${vs}`, 'key?', Boolean(process.env.COINGECKO_API_KEY));
-    const { data } = await http.get(url);
-    return data as Prices;
-  } catch (e: any) {
-    const status = e?.response?.status;
-    if (status === 429) {
-      const retryAfter = Number(e?.response?.headers?.['retry-after'] || 0);
-      const waitMs = Math.max(retryAfter * 1000, POLL_INTERVAL_MS * 2);
-      console.warn('rate-limited, backing off ms =', waitMs);
-      await new Promise(r => setTimeout(r, waitMs));
-    } else {
-      console.error('fetch error', status || e.message);
-    }
-    throw e;
-  }
+  console.log('fetching from CoinGecko:', `ids=${ids.join(',')}&vs=${vs}`, 'key?', Boolean(process.env.COINGECKO_API_KEY));
+  const { data } = await http.get(url);
+  return data as Prices;
 }
 
-// Cache to Redis and publish price events
+// Cache and publish price ticks
 async function cacheAndPublish(prices: Prices, vs: string) {
   const pipe = redis.pipeline();
   const ts = Date.now();
@@ -105,43 +89,73 @@ async function cacheAndPublish(prices: Prices, vs: string) {
   await pipe.exec();
 }
 
-// Alerts
-async function loadActiveAlerts(): Promise<Alert[]> {
+// Load and normalize alerts
+async function loadActiveAlerts(): Promise<DBAlert[]> {
   const { rows } = await pg.query('select * from alerts where active = true');
-  return rows as Alert[];
+  const alerts = rows as DBAlert[];
+  for (const a of alerts) {
+    if (!a.coin && a.coin_id) a.coin = a.coin_id;
+    if (!a.op && a.type) {
+      a.op = a.type === 'above' || a.type === '>' ? '>' :
+            a.type === 'below' || a.type === '<' ? '<' : null;
+    }
+    if ((a.price === null || a.price === undefined) && (a.value !== null && a.value !== undefined)) {
+      a.price = a.value as number;
+    }
+  }
+  return alerts;
 }
 
-function shouldTrigger(a: Alert, price: number): boolean {
-  if (a.type === 'above') return price > a.value;
-  if (a.type === 'below') return price < a.value;
-  // percent_change can be added later
+function shouldTrigger(op: '>' | '<', threshold: number, price: number): boolean {
+  if (op === '>') return price > threshold;
+  if (op === '<') return price < threshold;
   return false;
 }
 
+// Evaluate and publish alerts
 async function evaluateAlerts(prices: Prices, vs: string) {
   const alerts = await loadActiveAlerts();
+  console.log('ALERTS_LOADED', alerts.map(a => ({ id: a.id, coin: a.coin, op: a.op, price: a.price, active: (a as any).active })));
   const now = Date.now();
   const pipe = redis.pipeline();
 
   for (const a of alerts) {
-    const p = prices[a.coin_id]?.[vs];
-    if (typeof p !== 'number') continue;
+    const coin = a.coin as string;
+    const op = a.op as '>' | '<';
+    const threshold = Number(a.price);
+    const p = prices[coin]?.[vs];
 
-    const last = a.last_triggered_at ? new Date(a.last_triggered_at).getTime() : 0;
-    if (last && now - last < a.cooldown_sec * 1000) continue;
+    console.log('EVAL', a.id, coin, 'price=', p, 'op=', op, 'th=', threshold);
+    if (typeof p !== 'number' || !op || Number.isNaN(threshold)) continue;
 
-    if (shouldTrigger(a, p)) {
-      pipe.publish('prices.global', JSON.stringify({
-        type: 'alert',
-        id: a.id,
-        coin_id: a.coin_id,
-        vs_currency: a.vs_currency,
-        rule: a.type,
-        value: a.value,
-        price: p,
-        ts: now
-      }));
-      await pg.query('update alerts set last_triggered_at = now() where id = $1', [a.id]);
+    const cd = (a.cooldown_sec ?? 0) | 0;
+    const payload = {
+      type: 'alert',
+      id: a.id,
+      coin_id: coin,
+      vs_currency: vs,
+      rule: op,
+      value: threshold,
+      price: p,
+      ts: now
+    };
+
+    if (cd > 0) {
+      const cdKey = `alert:cooldown:${a.id}`;
+      const exists = await redis.exists(cdKey);
+      if (exists) continue;
+      if (shouldTrigger(op, threshold, p)) {
+        console.log('ALERT', a.id, coin, op, threshold, 'price=', p);
+        pipe.publish('prices.global', JSON.stringify(payload));
+        pipe.publish('alerts.global', JSON.stringify(payload));
+        pipe.setex(cdKey, cd, '1');
+      }
+    } else {
+      if (shouldTrigger(op, threshold, p)) {
+        console.log('ALERT', a.id, coin, op, threshold, 'price=', p);
+        pipe.publish('prices.global', JSON.stringify(payload));
+        pipe.publish('alerts.global', JSON.stringify(payload));
+      }
     }
   }
 
@@ -156,9 +170,7 @@ async function tick() {
     await cacheAndPublish(data, VS);
   } catch (e: any) {
     const status = e?.response?.status;
-    if (status === 429) {
-      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS * 2));
-    }
+    if (status === 429) await new Promise(r => setTimeout(r, POLL_INTERVAL_MS * 2));
   }
 }
 

@@ -39,6 +39,52 @@
 
 <body>
   <h1>Live Prices & Alerts</h1>
+  <section style="margin:16px 0;">
+    <h3>Create Alert</h3>
+    <form id="alertForm">
+      <label>Coin
+        <select name="coin_id">
+          <option value="bitcoin">bitcoin</option>
+          <option value="ethereum">ethereum</option>
+          <option value="solana">solana</option>
+        </select>
+      </label>
+      <label>VS
+        <select name="vs_currency">
+          <option value="usd">usd</option>
+        </select>
+      </label>
+      <label>Op
+        <select name="type">
+          <option value=">">&gt;</option>
+          <option value="<">&lt;</option>
+        </select>
+      </label>
+      <label>Price
+        <input name="value" type="number" step="0.01" required />
+      </label>
+      <button type="submit">Add</button>
+    </form>
+  </section>
+
+  <section>
+    <h3>Current Alerts</h3>
+    <table id="alertsTable" border="1" cellpadding="6">
+      <thead>
+        <tr>
+          <th>Id</th>
+          <th>Coin</th>
+          <th>VS</th>
+          <th>Op</th>
+          <th>Price</th>
+          <th>Active</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
   <div class="muted">Stream source: /stream (SSE append-only)</div>
   <table>
     <thead>
@@ -75,6 +121,61 @@
       } catch (e) { }
     };
   </script>
+  <script>
+    async function loadAlerts() {
+      const res = await fetch('/alerts');
+      const alerts = await res.json();
+      const tbody = document.querySelector('#alertsTable tbody');
+      tbody.innerHTML = '';
+      for (const a of alerts) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+        <td>${a.id}</td>
+        <td>${a.coin_id ?? a.coin}</td>
+        <td>${a.vs_currency ?? 'usd'}</td>
+        <td>${a.type ?? a.op}</td>
+        <td>${a.value ?? a.price}</td>
+        <td>${a.active}</td>
+        <td>
+          <button data-id="${a.id}" class="toggle">toggle</button>
+          <button data-id="${a.id}" class="del">delete</button>
+        </td>
+      `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    document.getElementById('alertForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {
+        coin_id: fd.get('coin_id'),
+        vs_currency: fd.get('vs_currency'),
+        type: fd.get('type'),
+        value: Number(fd.get('value')),
+      };
+      const r = await fetch('/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) { alert('Error creating alert'); return; }
+      e.target.reset();
+      loadAlerts();
+    });
+
+    document.addEventListener('click', async (e) => {
+      if (e.target.className === 'toggle') {
+        const id = e.target.getAttribute('data-id');
+        await fetch('/alerts/' + id, { method: 'PATCH' });
+        loadAlerts();
+      }
+      if (e.target.className === 'del') {
+        const id = e.target.getAttribute('data-id');
+        await fetch('/alerts/' + id, { method: 'DELETE' });
+        loadAlerts();
+      }
+    });
+
+    loadAlerts();
+  </script>
+
 </body>
 
 </html>

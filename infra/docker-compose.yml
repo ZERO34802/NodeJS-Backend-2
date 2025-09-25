@@ -1,24 +1,41 @@
-version: '3.9'
 services:
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
+    ports: ["6379:6379"]
 
-  postgres:
-    image: postgres:15-alpine
-    restart: unless-stopped
+  db:
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: secret
       POSTGRES_DB: crypto
-    ports:
-      - "5432:5432"
+    ports: ["5433:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Optional: run schema on first init (place alerts.sql under infra/sql)
-      # - ./sql/alerts.sql:/docker-entrypoint-initdb.d/01-alerts.sql:ro
+
+  api:
+    build:
+      context: ..          # repo root
+      dockerfile: packages/api/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      PG_URL: postgres://app:secret@db:5432/crypto
+      PORT: "3001"
+    ports: ["3001:3001"]
+    depends_on: [redis, db]
+    env_file: ["../.env"]
+
+  worker:
+    build:
+      context: ..          # repo root
+      dockerfile: packages/worker/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      PG_URL: postgres://app:secret@db:5432/crypto
+      POLL_INTERVAL_MS: "15000"
+      VS: "usd"
+    depends_on: [redis, db]
+    env_file: ["../.env"]
 
 volumes:
   pgdata:

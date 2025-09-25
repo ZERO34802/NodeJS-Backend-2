@@ -1,16 +1,18 @@
 {
   "name": "@app/api",
-  "main": "dist/index.js",
   "type": "module",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "node --loader ts-node/esm --no-warnings=ExperimentalWarning src/index.ts",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p ./tsconfig.json",
+    "start:dist": "node dist/index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.0",
     "ioredis": "^5.3.2",
     "pg": "^8.16.3",
+    "dotenv": "^17.2.2",
     "zod": "^3.22.0"
   },
   "devDependencies": {
