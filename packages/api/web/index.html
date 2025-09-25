@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>Crypto Alerts</title>
+  <style>
+    body {
+      font-family: system-ui, Arial, sans-serif;
+      margin: 20px;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 700px;
+    }
+
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+
+    tr.alert {
+      background: #fff3cd;
+    }
+
+    .muted {
+      color: #666;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Live Prices & Alerts</h1>
+  <div class="muted">Stream source: /stream (SSE append-only)</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Coin</th>
+        <th>VS</th>
+        <th>Price/Value</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <script>
+    const tbody = document.getElementById('rows');
+    function fmtTs(ts) { return new Date(ts).toLocaleTimeString(); }
+
+    const ev = new EventSource('http://localhost:3001/stream');
+    ev.onmessage = (m) => {
+      try {
+        const data = JSON.parse(m.data);
+        const tr = document.createElement('tr');
+        if (data.type === 'alert') tr.classList.add('alert');
+        const cells = [
+          data.type,
+          data.id || data.coin_id || '',
+          data.vs || data.vs_currency || '',
+          data.type === 'price' ? data.price : `${data.rule} ${data.value} (p=${data.price})`,
+          fmtTs(data.ts)
+        ];
+        tr.innerHTML = cells.map(c => `<td>${c}</td>`).join('');
+        tbody.prepend(tr);
+        while (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
+      } catch (e) { }
+    };
+  </script>
+</body>
+
+</html>
