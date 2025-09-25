@@ -139,7 +139,7 @@ infra/docker-compose.yml → api, worker, db (Postgres), redis services.
 packages/api/web/ → simple frontend consuming SSE.
 
 # Demo Links
-Video: add your recording link here.
+Video: (https://drive.google.com/file/d/1PWTCa8LEphC0Yv1tWeZxMF9LbE8JWPUb/view?usp=sharing)
 
 PDF: add your architecture/flow document link here.
 
