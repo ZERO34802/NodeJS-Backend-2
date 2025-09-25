@@ -1,6 +1,25 @@
+// Load env from repo root deterministically (works under ts-node/ESM)
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// repoRoot = packages/worker/../../..
+const repoRoot = path.resolve(__dirname, '../../..');
+dotenv.config({ path: path.join(repoRoot, '.env') });
+console.log('env loaded from:', path.join(repoRoot, '.env'), 'key?', Boolean(process.env.COINGECKO_API_KEY));
+
+
 import Axios from 'axios';
 import RedisPkg from 'ioredis';
 import pgPkg from 'pg';
+
+
+const rootEnv = path.resolve(__dirname, '../../..', '.env');
+dotenv.config({ path: rootEnv });
+console.log('loaded .env from:', rootEnv, 'has key?', Boolean(process.env.COINGECKO_API_KEY));
 
 const Redis = (RedisPkg as any).default || (RedisPkg as any);
 const { Pool } = pgPkg as any;
@@ -18,8 +37,12 @@ const pg = new Pool({ connectionString: process.env.PG_URL || 'postgres://app:se
 // HTTP
 const http = Axios.create({
   timeout: 8000,
-  headers: { 'User-Agent': 'crypto-worker/1.0 (+local-dev)' }
+  headers: {
+    'User-Agent': 'crypto-worker/1.0 (+local-dev)',
+    'x-cg-pro-api-key': process.env.COINGECKO_API_KEY || ''
+  }
 });
+
 
 // Types
 type Prices = Record<string, Record<string, number>>;
@@ -40,6 +63,7 @@ type Alert = {
 async function fetchPrices(ids: string[], vs: string): Promise<Prices> {
   const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=${vs}`;
   try {
+    console.log('fetching from CoinGecko:', `ids=${ids.join(',')}&vs=${vs}`, 'key?', Boolean(process.env.COINGECKO_API_KEY));
     const { data } = await http.get(url);
     return data as Prices;
   } catch (e: any) {
