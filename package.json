@@ -1,0 +1,22 @@
+{
+  "name": "crypto-realtime-alerts",
+  "private": true,
+  "workspaces": ["packages/*","web"],
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:api": "npm --workspace packages/api run dev",
+    "dev:worker": "npm --workspace packages/worker run dev",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "eslint": "^9.36.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.2"
+  }
+}

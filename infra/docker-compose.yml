@@ -1,0 +1,24 @@
+version: '3.9'
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: crypto
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Optional: run schema on first init (place alerts.sql under infra/sql)
+      # - ./sql/alerts.sql:/docker-entrypoint-initdb.d/01-alerts.sql:ro
+
+volumes:
+  pgdata:

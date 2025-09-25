@@ -1,0 +1,15 @@
+﻿infra
+node_modules
+packages
+package-lock.json
+package.json
+project-tree.txt
+tsconfig.json
+infra\docker-compose.yaml
+packages\api
+packages\api\src
+packages\api\package.json
+packages\api\tsconfig.json
+packages\api\src\env.ts
+packages\api\src\index.ts
+packages\api\src\redis.ts
